@@ -10,19 +10,25 @@ from functools import reduce
 from operator import mul
 from typing import Generator, List, Tuple, Iterator
 
-from read_data import train_data
+from read_data import train_data, Label, SampleLabels, ChanneledImage, SampleImages
 
+# Path to save the trained model
 SAVE_PATH = os.path.join(os.path.curdir, "recog_digits.pth")
+# Path to save loss data
 LOSS_JSON_PATH = os.path.join(os.path.curdir, "loss.json")
+# Back propagation configurations
 LEARNING_RATE = 0.01
 MOMENTUM = 0.9
 LOSS_FUNC_FACTORY = nn.MSELoss
+# How many iterations of training
 EPOCH_LIMIT = 1000
 
 torch.set_default_dtype(torch.double)
 
 
 class DigitNeural(nn.Module):
+    """Neural net class"""
+
     def __init__(self) -> None:
         super(DigitNeural, self).__init__()
         # 1×28×28 => 6×24×24 (5×5 square convolution)
@@ -56,28 +62,31 @@ class DigitNeural(nn.Module):
         x = torch.sigmoid(self.fc3(x))
         return x
 
-    @staticmethod
-    def num_flat_features(x: torch.Tensor) -> int:
-        extra_dims: torch.Size = x.size()[1:]
-        num_features: int = reduce(mul, extra_dims, 1)
-        return num_features
-
 
 class Gen_Tests:
-    def __init__(self, data: Iterator[Tuple[int, List[List[List[float]]]]]) -> None:
+    """Generator of samples to train the neural net"""
+
+    def __init__(self, data: Iterator[Tuple[Label, ChanneledImage]]) -> None:
         self._data = list(data)
 
-    def gen_test(self) -> Generator[Tuple[List[int], List[List[List[List[float]]]]], None, None]:
+    def gen_test(self) -> Generator[Tuple[SampleLabels, SampleImages], None, None]:
+        """Generate samples of size 100
+
+        Yields:
+            {SampleLabels}: The 100 labels
+            {SampleImages}: The 100 images
+        """
         random.shuffle(self._data)
         for i in range(0, 60000, 100):
             data_sample = self._data[i:i+100]
             zipped = zip(*data_sample)
-            labels: Tuple[int, ...] = next(zipped)
-            images: Tuple[List[List[List[float]]], ...] = next(zipped)
+            labels: SampleLabels = next(zipped)
+            images: SampleImages = next(zipped)
             yield labels, images
 
 
 def train_cuda(digit_neural: DigitNeural, test_gen: Gen_Tests, loss_func: nn.modules.loss._Loss, optimizer: optim.Optimizer) -> None:
+    """Train with CUDA, separated to avoid speculative execution when moving to CUDA"""
     cuda_device = torch.device("cuda")
     digit_neural.to(cuda_device)
     print("Model moved to CUDA!")
@@ -91,26 +100,23 @@ def train_cuda(digit_neural: DigitNeural, test_gen: Gen_Tests, loss_func: nn.mod
                 print(f"  Loop {i}:", loss_sum)
                 epoch_loss.append(loss_sum)
                 loss_sum = 0.0
+            # Preparations
             images_tensor = torch.tensor(images_sample)
-            # print("    Images tensor got!")
             images_tensor = images_tensor.to(cuda_device)
-            # print("    Images tensor moved to CUDA!")
             optimizer.zero_grad()
-            # print("    Gradient zeroed!")
+            # Run net (forward)
             output = digit_neural(images_tensor)
-            # print("    Neural net run!")
+            # Calculate target
             target = [[0.]*i + [1.] + [0.]*(9-i) for i in labels_sample]
             target_tensor = torch.tensor(target)
-            # print("    Target tensor got!")
             target_tensor = target_tensor.to(cuda_device)
-            # print("    Target tensor moved to CUDA!")
+            # Compute loss
             loss: torch.Tensor = loss_func(output, target_tensor)
             loss_sum += loss.item()
-            # print("    Loss got!", loss.item())
+            # Backward propagation
             loss.backward()
-            # print("    Backward propagated!")
+            # Midify weights
             optimizer.step()
-            # print("    Weights modified!")
         all_loss.append(epoch_loss)
     print("Finished Training!")
     with open(LOSS_JSON_PATH, "w") as file_obj:
@@ -120,6 +126,7 @@ def train_cuda(digit_neural: DigitNeural, test_gen: Gen_Tests, loss_func: nn.mod
 
 
 def train_cpu(digit_neural: DigitNeural, test_gen: Gen_Tests, loss_func: nn.modules.loss._Loss, optimizer: optim.Optimizer) -> None:
+    """Train with CPU"""
     all_loss: List[List[float]] = []
     for epoch in range(1, EPOCH_LIMIT+1):
         epoch_loss: List[float] = []
@@ -130,22 +137,21 @@ def train_cpu(digit_neural: DigitNeural, test_gen: Gen_Tests, loss_func: nn.modu
                 print(f"  Loop {i}:", loss_sum)
                 epoch_loss.append(loss_sum)
                 loss_sum = 0.0
+            # Preparations
             images_tensor = torch.tensor(images_sample)
-            # print("    Images tensor got!")
             optimizer.zero_grad()
-            # print("    Gradient zeroed!")
+            # Run net (forward)
             output = digit_neural(images_tensor)
-            # print("    Neural net run!")
+            # Calculate target
             target = [[0.]*i + [1.] + [0.]*(9-i) for i in labels_sample]
             target_tensor = torch.tensor(target)
-            # print("    Target tensor got!")
+            # Compute loss
             loss: torch.Tensor = loss_func(output, target_tensor)
             loss_sum += loss.item()
-            # print("    Loss got!", loss.item())
+            # Backward propagation
             loss.backward()
-            # print("    Backward propagated!")
+            # Midify weights
             optimizer.step()
-            # print("    Weights modified!")
         all_loss.append(epoch_loss)
     print("Finished Training!")
     with open(LOSS_JSON_PATH, "w") as file_obj:
@@ -155,18 +161,21 @@ def train_cpu(digit_neural: DigitNeural, test_gen: Gen_Tests, loss_func: nn.modu
 
 
 def main() -> None:
-    digit_neural = DigitNeural()
-    print("Neural net initialized!")
+    # Get data
     test_gen = Gen_Tests(train_data())
-    print("Training data obtained!")
+    # Create and configure neural net
+    digit_neural = DigitNeural()
     loss_func = LOSS_FUNC_FACTORY()
-    print("Loss function obtained!")
-    optimizer = optim.SGD(digit_neural.parameters(),
-                          lr=LEARNING_RATE, momentum=MOMENTUM)
-    print("Optimizer set!")
+    optimizer = optim.SGD(
+        digit_neural.parameters(),
+        lr=LEARNING_RATE,
+        momentum=MOMENTUM
+    )
     if torch.cuda.is_available():
+        print("Training with CUDA")
         train_cuda(digit_neural, test_gen, loss_func, optimizer)
     else:
+        print("Training with CPU")
         train_cpu(digit_neural, test_gen, loss_func, optimizer)
 
 

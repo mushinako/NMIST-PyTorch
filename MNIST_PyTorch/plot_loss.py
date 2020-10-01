@@ -7,6 +7,7 @@ from digit_recognition_train import LOSS_JSON_PATH
 
 
 def plot() -> None:
+    """Plot the loss and see how it progresses"""
     with open(LOSS_JSON_PATH, "r") as file_obj:
         data: List[List[float]] = json.load(file_obj)
     # Flatten data
