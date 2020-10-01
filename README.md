@@ -4,7 +4,8 @@ A simple [PyTorch](https://pytorch.org/) implementation of digit recognition fro
 
 ## File Structure
 
-All the scripts and data are in `MNIST_PyTorch/`
+All the scripts and data are in `MNIST_PyTorch/`.
+To run the scripts, `cd` into `MNIST_PyTorch/` first.
 
 | Path                         | Info                                 |
 | :--------------------------- | :----------------------------------- |
