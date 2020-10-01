@@ -7,7 +7,7 @@ A simple [PyTorch](https://pytorch.org/) implementation of digit recognition fro
 All the scripts and data are in `MNIST_PyTorch/`
 
 | Path                         | Info                                 |
-| :--------------------------: | :----------------------------------: |
+| :--------------------------- | :----------------------------------- |
 | `data/`                      | All the data files                   |
 | `digit_recognition_train.py` | Training script                      |
 | `digit_recognition_test.py`  | Testing script                       |
