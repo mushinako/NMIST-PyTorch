@@ -13,6 +13,6 @@ All the scripts and data are in `MNIST_PyTorch/`
 | `digit_recognition_test.py`  | Testing script                       |
 | `plot_loss.py`               | Plot loss from training              |
 | `read_data.py`               | Read data from data files            |
-| `*.pth`                      | Train model(s)                       |
+| `*.pth`                      | Trained model(s)                     |
 | `loss.json`                  | JSON data containing the loss values |
 | `test*.log`                  | Logs from testing                    |
